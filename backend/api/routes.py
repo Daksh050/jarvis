@@ -1,11 +1,10 @@
 # backend/api/routes.py
 from fastapi import APIRouter
 from pydantic import BaseModel
-from backend.core.llm_engine import generate_response
+from backend.core.agent import run_jarvis_task
 
 router = APIRouter()
 
-# Data models for strict type checking
 class CommandRequest(BaseModel):
     command: str
 
@@ -13,19 +12,18 @@ class CommandResponse(BaseModel):
     status: str
     reply: str
 
+# Changed from 'async def' to standard 'def' so blocking terminal actions don't crash the event loop
 @router.post("/execute", response_model=CommandResponse)
-async def execute_command(req: CommandRequest):
+def execute_command(req: CommandRequest):
     """
-    Receives text from the frontend, processes it via the local LLM,
-    and returns the system response.
+    Receives text from the frontend interface, hands it off to the 
+    Open Interpreter agent, and returns the final system response.
     """
-    # System prompt to give the AI its persona and constraints
-    system_prompt = f"You are a highly efficient local assistant named Jarvis. Be concise. User command: {req.command}"
-    
-    # Await the response from our core engine
-    reply = await generate_response(system_prompt)
-    
-    # In the future, we will add an "Intent Parser" here to trigger 
-    # specific scripts in backend/skills/ instead of just talking back.
-    
-    return CommandResponse(status="success", reply=reply)
+    try:
+        # Hand off the command to the autonomous agent
+        final_reply = run_jarvis_task(req.command)
+        
+        return CommandResponse(status="success", reply=str(final_reply))
+        
+    except Exception as e:
+        return CommandResponse(status="error", reply=f"Agent Malfunction: {str(e)}")
